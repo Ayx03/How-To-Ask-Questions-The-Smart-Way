@@ -29,7 +29,7 @@ jobs:
       - name: Get file diff
         id: diff
         run: |
-          # 获取对 README-zh_CN.md 或 README.md 的修改
+          # 检查哪些文件被修改
           if git diff --name-only HEAD^ HEAD | grep -q 'README-zh_CN.md'; then
             echo "source_file=README-zh_CN.md" >> $GITHUB_ENV
             echo "target_file=README.md" >> $GITHUB_ENV
@@ -40,7 +40,7 @@ jobs:
             echo "No relevant changes detected."
             exit 0
           fi
-          # 提取修改的内容
+          # 获取差异的内容
           git diff -U0 ${{ env.source_file }} | grep "^[+-]" | grep -v "+++" | grep -v "---" > changes.diff
 
       # Step 5: 同步翻译修改
@@ -64,11 +64,11 @@ if (!fs.existsSync(diffFile)) {
   process.exit(0);
 }
 
-// 读取修改内容
+// 读取差异内容
 const changes = fs.readFileSync(diffFile, 'utf8')
   .split('\n')
-  .filter(line => line.startsWith('+') && !line.startsWith('+++')) // 只取新增行
-  .map(line => line.slice(1).trim()) // 去掉前缀 "+"
+  .filter(line => line.startsWith('+') && !line.startsWith('+++')) // 只提取新增行
+  .map(line => line.slice(1).trim()) // 去掉 "+" 前缀
   .join('\n');
 
 if (!changes) {
@@ -79,14 +79,14 @@ if (!changes) {
 // 使用 OpenCC 进行翻译
 const converter = new OpenCC(process.env.SOURCE_FILE === 'README-zh_CN.md' ? 's2t.json' : 't2s.json');
 converter.convertPromise(changes).then(translatedContent => {
-  // 读取目标文件原内容
+  // 读取目标文件内容
   const targetContent = fs.existsSync(targetFile) ? fs.readFileSync(targetFile, 'utf8') : '';
   const syncMessage = `
 同步自对${process.env.SOURCE_FILE === 'README-zh_CN.md' ? '简体中文' : '繁体中文'}版本的修改，您可以对此修改进行评论或者提交您自己的修改来改进。
 Synced from a edit to the ${process.env.SOURCE_FILE === 'README-zh_CN.md' ? 'simplified' : 'traditional'} Chinese version, please comment on this commit or just commit your own changes to improve. Actions by Ayx03
   `.trim();
 
-  // 将翻译内容和同步信息附加到目标文件
+  // 将翻译内容和同步信息写入目标文件
   const updatedContent = `${targetContent}\n\n${translatedContent}\n\n${syncMessage}`;
   fs.writeFileSync(targetFile, updatedContent, 'utf8');
 }).catch(err => {
