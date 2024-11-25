@@ -14,15 +14,15 @@ jobs:
       - uses: actions/checkout@v3
       - name: Install OpenCC
         run: sudo apt-get install opencc
-      - name: Determine modified file
+      - name: 确定修改的文件
         id: determine_file
         run: |
           if [[ -n "$GITHUB_EVENT_PATH" ]]; then
-            modified_file=$(cat $GITHUB_EVENT_PATH | jq -r '.changes[] | select(.added || .modified) | .filename')
+            modified_file=$(cat "$GITHUB_EVENT_PATH" | jq -r '.changes[] | select(.added || .modified) | .filename')
           else
-            echo "::error title=Failed to determine modified file::No modified file found."
+            echo "::error title=无法确定修改的文件::未找到修改的文件。"
             exit 1
-          endif
+          fi
           echo "::set-output name=modified_file::$modified_file"
       - name: Check for noaction keyword
         if: steps.determine_file.outputs.modified_file != ''
