@@ -1,108 +1,55 @@
-name: Sync README Translation
+name: Sync README-zh_CN.md and README.md
 
 on:
   push:
+    branches: [ main ]
     paths:
-      - "README-zh_CN.md"
-      - "README.md"
+      - 'README-zh_CN.md'
+      - 'README.md'
 
 jobs:
-  sync-translation:
+  sync-readme:
     runs-on: ubuntu-latest
-
     steps:
-      # Step 1: 检查代码
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      # Step 2: 设置 Node.js 环境
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16'
-
-      # Step 3: 安装 OpenCC
+      - uses: actions/checkout@v3
       - name: Install OpenCC
-        run: npm install opencc
-
-      # Step 4: 获取文件修改内容
-      - name: Get file diff
-        id: diff
+        run: sudo apt-get install opencc
+      - name: Determine modified file
+        id: determine_file
         run: |
-          # 检查哪些文件被修改
-          if git diff --name-only HEAD^ HEAD | grep -q 'README-zh_CN.md'; then
-            echo "source_file=README-zh_CN.md" >> $GITHUB_ENV
-            echo "target_file=README.md" >> $GITHUB_ENV
-          elif git diff --name-only HEAD^ HEAD | grep -q 'README.md'; then
-            echo "source_file=README.md" >> $GITHUB_ENV
-            echo "target_file=README-zh_CN.md" >> $GITHUB_ENV
+          if [[ -n "$GITHUB_EVENT_PATH" ]]; then
+            modified_file=$(cat $GITHUB_EVENT_PATH | jq -r '.changes[] | select(.added || .modified) | .filename')
           else
-            echo "No relevant changes detected."
+            echo "::error title=Failed to determine modified file::No modified file found."
+            exit 1
+          endif
+          echo "::set-output name=modified_file::$modified_file"
+      - name: Check for noaction keyword
+        if: steps.determine_file.outputs.modified_file != ''
+        run: |
+          commit_message=$(git log -1 --format=%B)
+          if [[ $commit_message == *"noaction"* ]]; then
+            echo "::warning title=Noaction keyword detected::Skipping synchronization."
             exit 0
           fi
-          # 获取差异的内容
-          git diff -U0 ${{ env.source_file }} | grep "^[+-]" | grep -v "+++" | grep -v "---" > changes.diff
-
-      # Step 5: 同步翻译修改
-      - name: Translate and sync changes
-        env:
-          SOURCE_FILE: ${{ env.source_file }}
-          TARGET_FILE: ${{ env.target_file }}
+      - name: Translate and sync
+        if: steps.determine_file.outputs.modified_file != ''
         run: |
-          node <<EOF
-const fs = require('fs');
-const path = require('path');
-const { OpenCC } = require('opencc');
-
-// 定义文件路径
-const sourceFile = path.join(process.cwd(), process.env.SOURCE_FILE);
-const targetFile = path.join(process.cwd(), process.env.TARGET_FILE);
-const diffFile = path.join(process.cwd(), 'changes.diff');
-
-if (!fs.existsSync(diffFile)) {
-  console.error('No changes to process.');
-  process.exit(0);
-}
-
-// 读取差异内容
-const changes = fs.readFileSync(diffFile, 'utf8')
-  .split('\n')
-  .filter(line => line.startsWith('+') && !line.startsWith('+++')) // 只提取新增行
-  .map(line => line.slice(1).trim()) // 去掉 "+" 前缀
-  .join('\n');
-
-if (!changes) {
-  console.error('No valid additions found.');
-  process.exit(0);
-}
-
-// 使用 OpenCC 进行翻译
-const converter = new OpenCC(process.env.SOURCE_FILE === 'README-zh_CN.md' ? 's2t.json' : 't2s.json');
-converter.convertPromise(changes).then(translatedContent => {
-  // 读取目标文件内容
-  const targetContent = fs.existsSync(targetFile) ? fs.readFileSync(targetFile, 'utf8') : '';
-  const syncMessage = `
-同步自对${process.env.SOURCE_FILE === 'README-zh_CN.md' ? '简体中文' : '繁体中文'}版本的修改，您可以对此修改进行评论或者提交您自己的修改来改进。
-Synced from a edit to the ${process.env.SOURCE_FILE === 'README-zh_CN.md' ? 'simplified' : 'traditional'} Chinese version, please comment on this commit or just commit your own changes to improve. Actions by Ayx03
-  `.trim();
-
-  // 将翻译内容和同步信息写入目标文件
-  const updatedContent = `${targetContent}\n\n${translatedContent}\n\n${syncMessage}`;
-  fs.writeFileSync(targetFile, updatedContent, 'utf8');
-}).catch(err => {
-  console.error('Error during translation:', err);
-  process.exit(1);
-});
-EOF
-
-      # Step 6: 提交修改
-      - name: Commit changes
-        run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
-          git add ${{ env.target_file }}
-          git commit -m "Sync translation from ${{ env.source_file }} to ${{ env.target_file }}"
-
-      # Step 7: 推送修改
-      - name: Push changes
-        run: git push
+          # Determine source and target files
+          if [[ "${steps.determine_file.outputs.modified_file}" == "README-zh_CN.md" ]]; then
+            source_file="README-zh_CN.md"
+            target_file="README.md"
+            opencc_config="-c t2s"
+          else
+            source_file="README.md"
+            target_file="README.md"
+            opencc_config="-c s2t"
+          fi
+          # Translate modified content
+          git diff --name-only HEAD^ HEAD | xargs -I {} sh -c 'opencc {} -o {}.tmp $opencc_config'
+          # Replace original content with translated content
+          mv *.tmp *.md
+          # Commit changes
+          git add $target_file
+          git commit -m "$(opencc "$commit_message" $opencc_config)"
+          git push
