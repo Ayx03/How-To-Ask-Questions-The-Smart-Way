@@ -1,0 +1,78 @@
+name: Sync README Translation
+
+on:
+  push:
+    paths:
+      - "README-zh_CN.md"
+      - "README.md"
+
+jobs:
+  sync-translation:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step 1: 检查代码
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # Step 2: 设置 Node.js 环境（用以运行脚本）
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16'
+
+    # Step 3: 安装 OpenCC
+    - name: Install OpenCC
+      run: npm install opencc
+
+    # Step 4: 同步翻译脚本
+    - name: Sync translation
+      run: |
+        node <<EOF
+        const fs = require('fs');
+        const path = require('path');
+        const { OpenCC } = require('opencc');
+
+        const syncTranslation = async () => {
+          const zhCNPath = path.join(__dirname, 'README-zh_CN.md');
+          const zhHKPath = path.join(__dirname, 'README.md');
+
+          const [zhCNContent, zhHKContent] = [zhCNPath, zhHKPath].map((p) => 
+            fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''
+          );
+
+          if (!zhCNContent || !zhHKContent) {
+            console.error('Missing one of the required files.');
+            process.exit(1);
+          }
+
+          // 根据修改的文件决定同步方向
+          const changedFile = process.env.GITHUB_EVENT_PATH.includes('README-zh_CN.md') 
+                              ? 'README-zh_CN.md' 
+                              : 'README.md';
+
+          const targetPath = changedFile === 'README-zh_CN.md' ? zhHKPath : zhCNPath;
+          const sourceContent = changedFile === 'README-zh_CN.md' ? zhCNContent : zhHKContent;
+
+          // 配置 OpenCC 转换器
+          const converter = new OpenCC(changedFile === 'README-zh_CN.md' ? 's2t.json' : 't2s.json');
+
+          // 使用 OpenCC 进行转换
+          const translatedContent = await converter.convertPromise(sourceContent);
+
+          // 添加同步信息
+          const syncMessage = `
+同步自对${changedFile === 'README-zh_CN.md' ? '简体中文' : '繁体中文'}版本的修改，您可以对此修改进行评论或者提交您自己的修改来改进。
+Synced from a edit to the ${changedFile === 'README-zh_CN.md' ? 'simplified' : 'traditional'} Chinese version, please comment on this commit or just commit your own changes to improve. Actions by Ayx03
+          `.trim();
+
+          // 写入目标文件
+          fs.writeFileSync(targetPath, `${translatedContent}\n\n${syncMessage}`, 'utf8');
+        };
+
+        syncTranslation().catch((err) => {
+          console.error('Error during translation sync:', err);
+          process.exit(1);
+        });
+        EOF
+
