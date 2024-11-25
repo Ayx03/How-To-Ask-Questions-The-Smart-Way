@@ -16,7 +16,7 @@ jobs:
     - name: Set up Node.js (required for translation tools)
       uses: actions/setup-node@v3
       with:
-        node-version: '16'
+        node-version: '18'
 
     - name: Install Translation Tool
       run: npm install -g opencc-cli # 安装 OpenCC，用于简繁转换
