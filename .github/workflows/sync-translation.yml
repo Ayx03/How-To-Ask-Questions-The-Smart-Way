@@ -50,50 +50,50 @@ jobs:
           TARGET_FILE: ${{ env.target_file }}
         run: |
           node <<EOF
-          const fs = require('fs');
-          const path = require('path');
-          const { OpenCC } = require('opencc');
+const fs = require('fs');
+const path = require('path');
+const { OpenCC } = require('opencc');
 
-          // 定义文件路径
-          const sourceFile = path.join(process.cwd(), process.env.SOURCE_FILE);
-          const targetFile = path.join(process.cwd(), process.env.TARGET_FILE);
-          const diffFile = path.join(process.cwd(), 'changes.diff');
+// 定义文件路径
+const sourceFile = path.join(process.cwd(), process.env.SOURCE_FILE);
+const targetFile = path.join(process.cwd(), process.env.TARGET_FILE);
+const diffFile = path.join(process.cwd(), 'changes.diff');
 
-          if (!fs.existsSync(diffFile)) {
-            console.error('No changes to process.');
-            process.exit(0);
-          }
+if (!fs.existsSync(diffFile)) {
+  console.error('No changes to process.');
+  process.exit(0);
+}
 
-          // 读取修改内容
-          const changes = fs.readFileSync(diffFile, 'utf8')
-            .split('\n')
-            .filter(line => line.startsWith('+') && !line.startsWith('+++')) // 只取新增行
-            .map(line => line.slice(1).trim()) // 去掉前缀 "+"
-            .join('\n');
+// 读取修改内容
+const changes = fs.readFileSync(diffFile, 'utf8')
+  .split('\n')
+  .filter(line => line.startsWith('+') && !line.startsWith('+++')) // 只取新增行
+  .map(line => line.slice(1).trim()) // 去掉前缀 "+"
+  .join('\n');
 
-          if (!changes) {
-            console.error('No valid additions found.');
-            process.exit(0);
-          }
+if (!changes) {
+  console.error('No valid additions found.');
+  process.exit(0);
+}
 
-          // 使用 OpenCC 进行翻译
-          const converter = new OpenCC(process.env.SOURCE_FILE === 'README-zh_CN.md' ? 's2t.json' : 't2s.json');
-          converter.convertPromise(changes).then(translatedContent => {
-            // 读取目标文件原内容
-            const targetContent = fs.existsSync(targetFile) ? fs.readFileSync(targetFile, 'utf8') : '';
-            const syncMessage = `
+// 使用 OpenCC 进行翻译
+const converter = new OpenCC(process.env.SOURCE_FILE === 'README-zh_CN.md' ? 's2t.json' : 't2s.json');
+converter.convertPromise(changes).then(translatedContent => {
+  // 读取目标文件原内容
+  const targetContent = fs.existsSync(targetFile) ? fs.readFileSync(targetFile, 'utf8') : '';
+  const syncMessage = `
 同步自对${process.env.SOURCE_FILE === 'README-zh_CN.md' ? '简体中文' : '繁体中文'}版本的修改，您可以对此修改进行评论或者提交您自己的修改来改进。
 Synced from a edit to the ${process.env.SOURCE_FILE === 'README-zh_CN.md' ? 'simplified' : 'traditional'} Chinese version, please comment on this commit or just commit your own changes to improve. Actions by Ayx03
-            `.trim();
+  `.trim();
 
-            // 将翻译内容和同步信息附加到目标文件
-            const updatedContent = `${targetContent}\n\n${translatedContent}\n\n${syncMessage}`;
-            fs.writeFileSync(targetFile, updatedContent, 'utf8');
-          }).catch(err => {
-            console.error('Error during translation:', err);
-            process.exit(1);
-          });
-          EOF
+  // 将翻译内容和同步信息附加到目标文件
+  const updatedContent = `${targetContent}\n\n${translatedContent}\n\n${syncMessage}`;
+  fs.writeFileSync(targetFile, updatedContent, 'utf8');
+}).catch(err => {
+  console.error('Error during translation:', err);
+  process.exit(1);
+});
+EOF
 
       # Step 6: 提交修改
       - name: Commit changes
